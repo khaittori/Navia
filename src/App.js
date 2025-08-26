@@ -1,24 +1,28 @@
-import logo from './logo.svg';
-import './App.css';
+// src/App.jsx
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import UrlForm from './components/UrlForm';
+import Redirector from './components/Redirector';
+import './App.css'; // Pastikan ada file App.css
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <div className="App">
+        <header className="App-header">
+          <h1>URL Shortener</h1>
+        </header>
+        <main>
+          <Routes>
+            {/* Halaman utama dengan form */}
+            <Route path="/" element={<UrlForm />} />
+            {/* Halaman untuk redirect */}
+            <Route path="/short/:shortCode" element={<Redirector />} />
+            {/* Anda bisa menambahkan halaman lain di sini */}
+          </Routes>
+        </main>
+      </div>
+    </Router>
   );
 }
 
