@@ -34,13 +34,10 @@ export default async function handler(req) {
 
     const { original_url, description, thumbnail_url } = data;
     
-    // --- INI PERUBAHANNYA ---
-    // Judul tetap menggunakan deskripsi yang Anda masukkan
+    // Judul pratinjau akan diambil dari deskripsi yang Anda masukkan
     const pageTitle = description || 'Tautan Kustom';
-    // Deskripsi di bawah judul kita buat lebih rapi
-    const pageDescription = "Tautan ini dibuat menggunakan URL Shortener Kustom.";
-    // --- AKHIR PERUBAHAN ---
     
+    // --- INI PERUBAHANNYA: Kita hapus total tag meta deskripsi ---
     const html = `
       <!DOCTYPE html>
       <html>
@@ -50,12 +47,10 @@ export default async function handler(req) {
           
           <meta property="og:type" content="website" />
           <meta property="og:title" content="${pageTitle}" />
-          <meta property="og:description" content="${pageDescription}" />
           ${thumbnail_url ? `<meta property="og:image" content="${thumbnail_url}" />` : ''}
           
           <meta name="twitter:card" content="summary_large_image" />
           <meta name="twitter:title" content="${pageTitle}" />
-          <meta name="twitter:description" content="${pageDescription}" />
           ${thumbnail_url ? `<meta name="twitter:image" content="${thumbnail_url}" />` : ''}
         </head>
         <body>
@@ -66,6 +61,7 @@ export default async function handler(req) {
         </body>
       </html>
     `;
+    // --- AKHIR PERUBAHAN ---
     
     return new Response(html, {
       headers: { 'Content-Type': 'text/html' },
