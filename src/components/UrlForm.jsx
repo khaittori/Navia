@@ -1,19 +1,21 @@
 // src/components/UrlForm.jsx
+// src/components/UrlForm.jsx
+
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient'; // Pastikan path ini benar sesuai struktur folder Anda
+import { supabase } from '../supabaseClient'; // Pastikan path ini benar
 
 const UrlForm = () => {
+  // --- State Management ---
   const [originalUrl, setOriginalUrl] = useState('');
   const [description, setDescription] = useState('');
   const [thumbnailFile, setThumbnailFile] = useState(null);
-  const [loading, setLoading] = useState(false); // Status loading untuk keseluruhan proses
-  const [uploading, setUploading] = useState(false); // Status loading khusus untuk upload thumbnail
+  const [loading, setLoading] = useState(false); // Untuk proses database
+  const [uploading, setUploading] = useState(false); // Khusus untuk upload thumbnail
   const [shortUrl, setShortUrl] = useState('');
   const [error, setError] = useState('');
 
+  // --- Helper Functions ---
   const generateShortCode = () => {
-    // Logika sederhana untuk menghasilkan kode pendek (bisa dibuat lebih kompleks)
-    // Menggunakan huruf kecil dan angka, panjang 6 karakter
     return Math.random().toString(36).substring(2, 8);
   };
 
@@ -25,11 +27,12 @@ const UrlForm = () => {
     }
   };
 
+  // --- Main Logic on Form Submit ---
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true); // Aktifkan loading utama
+    setLoading(true);
     setError('');
-    setShortUrl(''); // Reset hasil sebelumnya
+    setShortUrl('');
 
     if (!originalUrl) {
       setError('Original URL is required.');
@@ -37,64 +40,49 @@ const UrlForm = () => {
       return;
     }
 
-    let thumbnailUrl = null;
-    let uploadError = null; // Gunakan 'let' agar bisa diassign ulang
+    let finalThumbnailUrl = null; // Variabel untuk menyimpan URL thumbnail
 
-    // 1. Upload Thumbnail jika ada file yang dipilih
+    // BAGIAN 1: Proses upload thumbnail jika ada file
     if (thumbnailFile) {
-      setUploading(true); // Aktifkan status uploading thumbnail
+      setUploading(true);
       const fileExt = thumbnailFile.name.split('.').pop();
-      // Membuat nama file unik: timestamp + random string + ekstensi
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-      const filePath = `thumbnails/${fileName}`; // Path di dalam bucket Supabase Storage
+      const filePath = `thumbnails/${fileName}`;
 
       try {
-        // Upload file ke Supabase Storage
-        const { error: uploadErr } = await supabase.storage
-          .from('thumbnails') // Nama bucket Anda di Supabase Storage
-          .upload(filePath, thumbnailFile, {
-            cacheControl: '3600', // Cache selama 1 jam (sesuaikan jika perlu)
-            upsert: true, // Timpa file jika sudah ada dengan nama yang sama
-          });
+        // Langkah A: Upload file ke Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('thumbnails')
+          .upload(filePath, thumbnailFile);
 
-        if (uploadErr) {
-          uploadError = uploadErr; // Simpan error upload
-          throw uploadErr; // Lanjut ke catch block untuk penanganan error terpusat
+        if (uploadError) {
+          throw uploadError; // Lemparkan error untuk ditangkap oleh 'catch'
         }
 
-        // Jika upload berhasil, dapatkan URL publik dari file yang diunggah
-        // Pastikan bucket 'thumbnails' Anda diatur ke 'Public' di Supabase UI
+        // Langkah B: Jika upload berhasil, dapatkan URL publiknya
         const { publicURL, error: urlError } = supabase.storage
           .from('thumbnails')
           .getPublicUrl(filePath);
 
         if (urlError) {
-          uploadError = urlError; // Simpan error saat mendapatkan URL
-          throw urlError; // Lanjut ke catch block
+          throw urlError; // Lemparkan error jika gagal mendapatkan URL
         }
-        thumbnailUrl = publicURL; // Simpan URL thumbnail jika berhasil
-        // console.log('Thumbnail uploaded successfully:', thumbnailUrl);
+
+        // Langkah C: Simpan URL ke variabel. Ini adalah langkah kunci yang sebelumnya gagal.
+        finalThumbnailUrl = publicURL;
 
       } catch (error) {
-        console.error('Error handling thumbnail:', error);
+        console.error('Error during thumbnail processing:', error);
         setError(`Error processing thumbnail: ${error.message}`);
-        // Pastikan status loading direset jika ada error pada thumbnail
         setUploading(false);
         setLoading(false);
-        return; // Hentikan proses lebih lanjut jika ada error pada thumbnail
+        return; // Hentikan seluruh proses jika thumbnail gagal
       } finally {
-        setUploading(false); // Reset status upload thumbnail
+        setUploading(false); // Matikan status uploading setelah selesai
       }
     }
 
-    // Jika ada error saat memproses thumbnail, hentikan proses di sini
-    if (uploadError) {
-      // Error sudah ditampilkan oleh blok catch di atas, hanya perlu menghentikan proses
-      // setLoading(false); // Sudah di-reset di catch block
-      return;
-    }
-
-    // 2. Generate Short Code dan Simpan Data ke Database
+    // BAGIAN 2: Simpan semua data ke tabel 'urls' di database
     const shortCode = generateShortCode();
     try {
       const { data, error: dbError } = await supabase
@@ -104,114 +92,106 @@ const UrlForm = () => {
             original_url: originalUrl,
             short_code: shortCode,
             description: description,
-            thumbnail_url: thumbnailUrl, // Simpan URL thumbnail (bisa null jika tidak ada)
+            thumbnail_url: finalThumbnailUrl, // Simpan URL thumbnail (akan NULL jika tidak ada file)
           },
         ])
-        .select(); // select() untuk mendapatkan data yang baru dimasukkan
+        .select();
 
       if (dbError) {
-        throw dbError; // Lanjut ke catch block untuk penanganan error database
+        throw dbError;
       }
 
       if (data && data.length > 0) {
-        // Gunakan window.location.origin untuk mendapatkan domain aplikasi saat ini
-        // Ini akan bekerja secara otomatis baik di localhost maupun setelah deploy
         const newShortUrl = `${window.location.origin}/short/${data[0].short_code}`;
         setShortUrl(newShortUrl);
-        // console.log('URL created:', newShortUrl);
       }
     } catch (error) {
       console.error('Error saving to database:', error);
       setError(`Error creating short URL: ${error.message}`);
     } finally {
-      setLoading(false); // Reset loading utama setelah proses selesai (baik berhasil maupun gagal)
+      setLoading(false); // Matikan loading utama setelah selesai
     }
   };
 
+  // --- JSX Rendering ---
   return (
-    <div className="url-form-container" style={{ maxWidth: '600px', margin: '20px auto', padding: '20px', border: '1px solid #ccc', borderRadius: '8px', fontFamily: 'Arial, sans-serif', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '20px', color: '#333' }}>Create a Short URL</h2>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+    <div className="url-form-container" style={{ maxWidth: '600px', margin: '40px auto', padding: '30px', border: '1px solid #e0e0e0', borderRadius: '12px', fontFamily: 'Arial, sans-serif', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+      <h2 style={{ textAlign: 'center', marginBottom: '25px', color: '#333' }}>Create a Custom Short URL</h2>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div>
-          <label htmlFor="originalUrl" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>Original URL:</label>
+          <label htmlFor="originalUrl" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>Original URL:</label>
           <input
             type="url"
             id="originalUrl"
             value={originalUrl}
             onChange={(e) => setOriginalUrl(e.target.value)}
             required
-            style={{ width: 'calc(100% - 20px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
-            placeholder="e.g., https://example.com/your-long-url"
+            style={{ width: 'calc(100% - 22px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
+            placeholder="e.g., https://example.com/your-very-long-url"
           />
         </div>
         <div>
-          <label htmlFor="description" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>Description (Optional):</label>
+          <label htmlFor="description" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>Description (for Link Preview):</label>
           <input
             type="text"
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            style={{ width: 'calc(100% - 20px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
-            placeholder="Add a short description"
+            style={{ width: 'calc(100% - 22px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
+            placeholder="e.g., My Awesome Product Page"
           />
         </div>
         <div>
-          <label htmlFor="thumbnail" style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#555' }}>Thumbnail (Optional):</label>
+          <label htmlFor="thumbnail" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>Thumbnail (for Link Preview):</label>
           <input
             type="file"
             id="thumbnail"
-            accept="image/*" // Hanya menerima file gambar
+            accept="image/*"
             onChange={handleFileChange}
-            style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', fontSize: '16px', backgroundColor: '#f8f9fa' }}
+            style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', width: '100%', fontSize: '16px', backgroundColor: '#f9f9f9' }}
           />
           {thumbnailFile && (
-            <p style={{ fontSize: '0.9em', color: '#555', marginTop: '5px' }}>
+            <p style={{ fontSize: '0.9em', color: '#555', marginTop: '8px', fontStyle: 'italic' }}>
               Selected: {thumbnailFile.name}
             </p>
           )}
         </div>
         <button
           type="submit"
-          disabled={loading || uploading} // Tombol nonaktif jika sedang loading atau uploading
+          disabled={loading || uploading}
           style={{
-            padding: '12px 20px',
-            backgroundColor: (loading || uploading) ? '#aaa' : '#007bff', // Warna berbeda saat disabled
+            padding: '14px 20px',
+            backgroundColor: (loading || uploading) ? '#b0b0b0' : '#007bff',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
             cursor: (loading || uploading) ? 'not-allowed' : 'pointer',
             fontSize: '16px',
+            fontWeight: 'bold',
             transition: 'background-color 0.3s ease, opacity 0.3s ease',
-            opacity: (loading || uploading) ? 0.7 : 1
           }}
         >
-          {uploading ? 'Uploading Thumbnail...' : (loading ? 'Processing...' : 'Create Short URL')}
+          {uploading ? 'Uploading Thumbnail...' : (loading ? 'Creating Link...' : 'Create Short URL')}
         </button>
       </form>
 
-      {/* Menampilkan Error Message */}
-      {error && <p style={{ color: 'red', textAlign: 'center', marginTop: '15px', fontWeight: 'bold' }}>Error: {error}</p>}
+      {error && <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '20px', fontWeight: 'bold' }}>{error}</p>}
 
-      {/* Menampilkan Hasil URL Pendek */}
       {shortUrl && (
-        <div style={{ marginTop: '20px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '15px' }}>
-          <h3 style={{ marginBottom: '10px', color: '#333' }}>Your Short URL:</h3>
-          <p style={{ backgroundColor: '#e9ecef', padding: '10px', borderRadius: '4px', wordBreak: 'break-all', fontSize: '1.1em', color: '#0056b3' }}>
-            <a href={shortUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff', textDecoration: 'none', wordBreak: 'break-all' }}>
+        <div style={{ marginTop: '30px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+          <h3 style={{ marginBottom: '10px', color: '#333' }}>Your Short URL is Ready!</h3>
+          <p style={{ backgroundColor: '#e9ecef', padding: '12px', borderRadius: '4px', wordBreak: 'break-all' }}>
+            <a href={shortUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1em' }}>
               {shortUrl}
             </a>
           </p>
-          {/* Menampilkan preview thumbnail jika ada */}
           {thumbnailFile && (
-            <div style={{ marginTop: '15px' }}>
+            <div style={{ marginTop: '20px' }}>
               <h4 style={{ marginBottom: '10px', color: '#555' }}>Thumbnail Preview:</h4>
               <img
-                src={thumbnailFile.previewURL || URL.createObjectURL(thumbnailFile)}
+                src={URL.createObjectURL(thumbnailFile)}
                 alt="Thumbnail Preview"
-                style={{ maxWidth: '150px', maxHeight: '150px', borderRadius: '4px', border: '1px solid #ddd' }}
-                // Cleanup the object URL after component unmounts or when file changes
-                // This is a basic example, for production consider useEffect cleanup
-                onError={(e) => { e.target.src = 'path/to/fallback/image.png'; }} // Fallback image jika preview gagal
+                style={{ maxWidth: '150px', maxHeight: '150px', borderRadius: '8px', border: '1px solid #ddd' }}
               />
             </div>
           )}
