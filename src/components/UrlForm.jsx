@@ -28,14 +28,6 @@ const UrlForm = () => {
     setError('');
     setShortUrl('');
 
-    console.log("--- DEBUG: Form submitted ---");
-
-    if (!originalUrl) {
-      setError('Original URL is required.');
-      setLoading(false);
-      return;
-    }
-
     let finalThumbnailUrl = null;
 
     if (thumbnailFile) {
@@ -44,32 +36,42 @@ const UrlForm = () => {
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
       const filePath = `thumbnails/${fileName}`;
 
-      console.log(`--- DEBUG: Uploading file: ${filePath} ---`);
-
       try {
         const { error: uploadError } = await supabase.storage
           .from('thumbnails')
           .upload(filePath, thumbnailFile);
 
         if (uploadError) {
-          console.error("--- DEBUG: Supabase upload error ---", uploadError);
           throw uploadError;
         }
-        console.log("--- DEBUG: File uploaded successfully ---");
 
-        const { publicURL, error: urlError } = supabase.storage
+        // --- PERUBAHAN KRUSIAL ADA DI SINI ---
+        // Kita tidak lagi langsung mengambil publicURL. Kita ambil seluruh objek balasan.
+        const getUrlResult = supabase.storage
           .from('thumbnails')
           .getPublicUrl(filePath);
+        
+        // Log seluruh objek balasan untuk debugging
+        console.log("--- DEBUG: Full getPublicUrl result object ---", getUrlResult);
 
-        if (urlError) {
-          console.error("--- DEBUG: Supabase getPublicUrl error ---", urlError);
-          throw urlError;
+        // Cek apakah ada error di dalam objek balasan
+        if (getUrlResult.error) {
+            throw getUrlResult.error;
         }
 
-        finalThumbnailUrl = publicURL;
-        console.log("--- DEBUG: Got public URL:", finalThumbnailUrl, "---");
+        // Ekstrak URL dari struktur data yang baru: result.data.publicURL
+        // Jika getUrlResult.data null atau undefined, ini akan menghasilkan undefined dengan aman
+        finalThumbnailUrl = getUrlResult.data?.publicURL;
+
+        console.log("--- DEBUG: Extracted public URL:", finalThumbnailUrl, "---");
+        
+        if (!finalThumbnailUrl) {
+            throw new Error("Failed to extract public URL, the returned value was undefined.");
+        }
+        // --- AKHIR DARI PERUBAHAN KRUSIAL ---
 
       } catch (error) {
+        console.error("--- DEBUG: Error during thumbnail processing ---", error);
         setError(`Error processing thumbnail: ${error.message}`);
         setUploading(false);
         setLoading(false);
@@ -96,11 +98,8 @@ const UrlForm = () => {
         .select();
 
       if (dbError) {
-        console.error("--- DEBUG: Supabase database insert error ---", dbError);
         throw dbError;
       }
-
-      console.log("--- DEBUG: Data inserted successfully ---", data);
 
       if (data && data.length > 0) {
         const newShortUrl = `${window.location.origin}/short/${data[0].short_code}`;
