@@ -29,18 +29,18 @@ export default async function handler(req) {
 
     if (error || !data) {
       const rootUrl = new URL(req.url).origin;
-      // Redirect ke halaman utama jika URL tidak ditemukan
       return new Response(null, { status: 307, headers: { Location: rootUrl } });
     }
 
     const { original_url, description, thumbnail_url } = data;
-    const pageTitle = description || 'Tautan Kustom';
-    const pageDescription = `Klik untuk membuka tautan: ${original_url}`;
     
-    // --- INI LOGIKA BARU YANG DISEMPURNAKAN ---
-    // Sajikan halaman HTML ini untuk SEMUA orang (bot dan pengguna).
-    // Bot akan membaca tag <meta>.
-    // Pengguna akan dieksekusi oleh <script> untuk redirect.
+    // --- INI PERUBAHANNYA ---
+    // Judul tetap menggunakan deskripsi yang Anda masukkan
+    const pageTitle = description || 'Tautan Kustom';
+    // Deskripsi di bawah judul kita buat lebih rapi
+    const pageDescription = "Tautan ini dibuat menggunakan URL Shortener Kustom.";
+    // --- AKHIR PERUBAHAN ---
+    
     const html = `
       <!DOCTYPE html>
       <html>
@@ -48,22 +48,18 @@ export default async function handler(req) {
           <meta charset="utf-8" />
           <title>${pageTitle}</title>
           
-          <!-- Open Graph (Facebook, WhatsApp, Instagram) -->
           <meta property="og:type" content="website" />
           <meta property="og:title" content="${pageTitle}" />
           <meta property="og:description" content="${pageDescription}" />
           ${thumbnail_url ? `<meta property="og:image" content="${thumbnail_url}" />` : ''}
           
-          <!-- Twitter -->
           <meta name="twitter:card" content="summary_large_image" />
           <meta name="twitter:title" content="${pageTitle}" />
           <meta name="twitter:description" content="${pageDescription}" />
           ${thumbnail_url ? `<meta name="twitter:image" content="${thumbnail_url}" />` : ''}
         </head>
         <body>
-          <p>Anda sedang dialihkan ke: ${original_url}</p>
-          
-          <!-- Redirect menggunakan JavaScript. Bot biasanya tidak menjalankan ini. -->
+          <p>Anda sedang dialihkan...</p>
           <script type="text/javascript">
             window.location.href = "${original_url}";
           </script>
