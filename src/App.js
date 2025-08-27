@@ -1,28 +1,28 @@
 // src/App.jsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async'; // Import HelmetProvider
 import UrlForm from './components/UrlForm';
 import Redirector from './components/Redirector';
-import './App.css'; // Pastikan ada file App.css
+import './App.css';
 
 function App() {
   return (
-    <Router>
-      <div className="App">
-        <header className="App-header">
-          <h1>URL Shortener</h1>
-        </header>
-        <main>
-          <Routes>
-            {/* Halaman utama dengan form */}
-            <Route path="/" element={<UrlForm />} />
-            {/* Halaman untuk redirect */}
-            <Route path="/short/:shortCode" element={<Redirector />} />
-            {/* Anda bisa menambahkan halaman lain di sini */}
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    <HelmetProvider> {/* Bungkus aplikasi dengan HelmetProvider */}
+      <Router>
+        <div className="App">
+          <header className="App-header">
+            <h1>URL Shortener</h1>
+          </header>
+          <main>
+            <Routes>
+              <Route path="/" element={<UrlForm />} />
+              <Route path="/short/:shortCode" element={<Redirector />} />
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </HelmetProvider>
   );
 }
 
