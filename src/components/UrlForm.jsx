@@ -1,23 +1,18 @@
 // src/components/UrlForm.jsx
-// src/components/UrlForm.jsx
 
 import React, { useState } from 'react';
-import { supabase } from '../supabaseClient'; // Pastikan path ini benar
+import { supabase } from '../supabaseClient';
 
 const UrlForm = () => {
-  // --- State Management ---
   const [originalUrl, setOriginalUrl] = useState('');
   const [description, setDescription] = useState('');
   const [thumbnailFile, setThumbnailFile] = useState(null);
-  const [loading, setLoading] = useState(false); // Untuk proses database
-  const [uploading, setUploading] = useState(false); // Khusus untuk upload thumbnail
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [shortUrl, setShortUrl] = useState('');
   const [error, setError] = useState('');
 
-  // --- Helper Functions ---
-  const generateShortCode = () => {
-    return Math.random().toString(36).substring(2, 8);
-  };
+  const generateShortCode = () => Math.random().toString(36).substring(2, 8);
 
   const handleFileChange = (event) => {
     if (event.target.files && event.target.files[0]) {
@@ -27,12 +22,13 @@ const UrlForm = () => {
     }
   };
 
-  // --- Main Logic on Form Submit ---
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setShortUrl('');
+
+    console.log("--- DEBUG: Form submitted ---");
 
     if (!originalUrl) {
       setError('Original URL is required.');
@@ -40,81 +36,85 @@ const UrlForm = () => {
       return;
     }
 
-    let finalThumbnailUrl = null; // Variabel untuk menyimpan URL thumbnail
+    let finalThumbnailUrl = null;
 
-    // BAGIAN 1: Proses upload thumbnail jika ada file
     if (thumbnailFile) {
       setUploading(true);
       const fileExt = thumbnailFile.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
       const filePath = `thumbnails/${fileName}`;
 
+      console.log(`--- DEBUG: Uploading file: ${filePath} ---`);
+
       try {
-        // Langkah A: Upload file ke Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from('thumbnails')
           .upload(filePath, thumbnailFile);
 
         if (uploadError) {
-          throw uploadError; // Lemparkan error untuk ditangkap oleh 'catch'
+          console.error("--- DEBUG: Supabase upload error ---", uploadError);
+          throw uploadError;
         }
+        console.log("--- DEBUG: File uploaded successfully ---");
 
-        // Langkah B: Jika upload berhasil, dapatkan URL publiknya
         const { publicURL, error: urlError } = supabase.storage
           .from('thumbnails')
           .getPublicUrl(filePath);
 
         if (urlError) {
-          throw urlError; // Lemparkan error jika gagal mendapatkan URL
+          console.error("--- DEBUG: Supabase getPublicUrl error ---", urlError);
+          throw urlError;
         }
 
-        // Langkah C: Simpan URL ke variabel. Ini adalah langkah kunci yang sebelumnya gagal.
         finalThumbnailUrl = publicURL;
+        console.log("--- DEBUG: Got public URL:", finalThumbnailUrl, "---");
 
       } catch (error) {
-        console.error('Error during thumbnail processing:', error);
         setError(`Error processing thumbnail: ${error.message}`);
         setUploading(false);
         setLoading(false);
-        return; // Hentikan seluruh proses jika thumbnail gagal
+        return;
       } finally {
-        setUploading(false); // Matikan status uploading setelah selesai
+        setUploading(false);
       }
     }
 
-    // BAGIAN 2: Simpan semua data ke tabel 'urls' di database
     const shortCode = generateShortCode();
+    const dataToInsert = {
+      original_url: originalUrl,
+      short_code: shortCode,
+      description: description,
+      thumbnail_url: finalThumbnailUrl,
+    };
+
+    console.log("--- DEBUG: Data to be inserted into database ---", dataToInsert);
+
     try {
       const { data, error: dbError } = await supabase
         .from('urls')
-        .insert([
-          {
-            original_url: originalUrl,
-            short_code: shortCode,
-            description: description,
-            thumbnail_url: finalThumbnailUrl, // Simpan URL thumbnail (akan NULL jika tidak ada file)
-          },
-        ])
+        .insert([dataToInsert])
         .select();
 
       if (dbError) {
+        console.error("--- DEBUG: Supabase database insert error ---", dbError);
         throw dbError;
       }
+
+      console.log("--- DEBUG: Data inserted successfully ---", data);
 
       if (data && data.length > 0) {
         const newShortUrl = `${window.location.origin}/short/${data[0].short_code}`;
         setShortUrl(newShortUrl);
       }
     } catch (error) {
-      console.error('Error saving to database:', error);
       setError(`Error creating short URL: ${error.message}`);
     } finally {
-      setLoading(false); // Matikan loading utama setelah selesai
+      setLoading(false);
     }
   };
 
-  // --- JSX Rendering ---
   return (
+    // ... JSX Anda tetap sama persis, tidak perlu diubah ...
     <div className="url-form-container" style={{ maxWidth: '600px', margin: '40px auto', padding: '30px', border: '1px solid #e0e0e0', borderRadius: '12px', fontFamily: 'Arial, sans-serif', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
       <h2 style={{ textAlign: 'center', marginBottom: '25px', color: '#333' }}>Create a Custom Short URL</h2>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
