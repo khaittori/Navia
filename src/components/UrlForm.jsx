@@ -45,30 +45,20 @@ const UrlForm = () => {
           throw uploadError;
         }
 
-        // --- PERUBAHAN KRUSIAL ADA DI SINI ---
-        // Kita tidak lagi langsung mengambil publicURL. Kita ambil seluruh objek balasan.
         const getUrlResult = supabase.storage
           .from('thumbnails')
           .getPublicUrl(filePath);
         
-        // Log seluruh objek balasan untuk debugging
-        console.log("--- DEBUG: Full getPublicUrl result object ---", getUrlResult);
-
-        // Cek apakah ada error di dalam objek balasan
         if (getUrlResult.error) {
             throw getUrlResult.error;
         }
 
-        // Ekstrak URL dari struktur data yang baru: result.data.publicURL
-        // Jika getUrlResult.data null atau undefined, ini akan menghasilkan undefined dengan aman
-        finalThumbnailUrl = getUrlResult.data?.publicURL;
-
-        console.log("--- DEBUG: Extracted public URL:", finalThumbnailUrl, "---");
+        // --- INI PERBAIKANNYA: Menggunakan publicUrl (u kecil) ---
+        finalThumbnailUrl = getUrlResult.data?.publicUrl;
         
         if (!finalThumbnailUrl) {
             throw new Error("Failed to extract public URL, the returned value was undefined.");
         }
-        // --- AKHIR DARI PERUBAHAN KRUSIAL ---
 
       } catch (error) {
         console.error("--- DEBUG: Error during thumbnail processing ---", error);
@@ -88,8 +78,6 @@ const UrlForm = () => {
       description: description,
       thumbnail_url: finalThumbnailUrl,
     };
-
-    console.log("--- DEBUG: Data to be inserted into database ---", dataToInsert);
 
     try {
       const { data, error: dbError } = await supabase
