@@ -19,15 +19,24 @@ const UrlForm = () => {
     try {
       let thumbnailUrl = null;
 
-      // 1. Upload thumbnail dulu (kalau ada) pakai client-side upload
+      // 1. Upload thumbnail dulu (kalau ada)
       if (thumbnailFile) {
         setUploading(true);
-        const blob = await upload(thumbnailFile.name, thumbnailFile, {
-          access: 'public',
-          handleUploadUrl: '/api/upload',
-        });
-        thumbnailUrl = blob.url;
-        setUploading(false);
+        try {
+          // Pakai absolute URL biar lebih aman
+          const handleUploadUrl = `${window.location.origin}/api/upload`;
+
+          const blob = await upload(thumbnailFile.name, thumbnailFile, {
+            access: 'public',
+            handleUploadUrl,
+          });
+          thumbnailUrl = blob.url;
+        } catch (uploadErr) {
+          console.error('Upload failed:', uploadErr);
+          throw new Error('Gagal upload thumbnail: ' + (uploadErr.message || 'Unknown error'));
+        } finally {
+          setUploading(false);
+        }
       }
 
       // 2. Kirim data ke create-url sebagai JSON
