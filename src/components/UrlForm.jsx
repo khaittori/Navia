@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { upload } from '@vercel/blob/client';
 
 const UrlForm = () => {
   const [originalUrl, setOriginalUrl] = useState('');
@@ -23,14 +22,22 @@ const UrlForm = () => {
       if (thumbnailFile) {
         setUploading(true);
         try {
-          // Pakai absolute URL biar lebih aman
-          const handleUploadUrl = `${window.location.origin}/api/upload`;
-
-          const blob = await upload(thumbnailFile.name, thumbnailFile, {
-            access: 'public',
-            handleUploadUrl,
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: {
+              'x-filename': thumbnailFile.name,
+              'content-type': thumbnailFile.type || 'image/jpeg',
+            },
+            body: thumbnailFile, // kirim file langsung
           });
-          thumbnailUrl = blob.url;
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(data.error || 'Upload failed');
+          }
+
+          thumbnailUrl = data.url;
         } catch (uploadErr) {
           console.error('Upload failed:', uploadErr);
           throw new Error('Gagal upload thumbnail: ' + (uploadErr.message || 'Unknown error'));

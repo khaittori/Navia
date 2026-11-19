@@ -1,5 +1,5 @@
 // api/upload.js
-import { handleUpload } from '@vercel/blob/client';
+import { put } from '@vercel/blob';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -7,50 +7,38 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Pastikan body selalu object
-    let body = req.body;
-    if (typeof body === 'string') {
-      try {
-        body = JSON.parse(body);
-      } catch {
-        return res.status(400).json({ error: 'Invalid JSON body' });
-      }
+    // Baca file dari FormData
+    const chunks = [];
+    for await (const chunk of req) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    // Ambil filename dari header
+    const contentType = req.headers['content-type'] || '';
+    const filename = req.headers['x-filename'] || `thumbnail-${Date.now()}.jpg`;
+
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'No file received' });
     }
 
-    if (!body || typeof body !== 'object') {
-      return res.status(400).json({ error: 'Missing or invalid body' });
+    if (buffer.length > 4 * 1024 * 1024) {
+      return res.status(400).json({ error: 'File too large (max 4MB)' });
     }
 
-    const jsonResponse = await handleUpload({
-      body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        return {
-          allowedContentTypes: [
-            'image/jpeg',
-            'image/png',
-            'image/webp',
-            'image/gif',
-            'image/jpg',
-          ],
-          maximumSizeInBytes: 4 * 1024 * 1024, // 4MB
-          tokenPayload: JSON.stringify({}),
-        };
-      },
-      onUploadCompleted: async ({ blob }) => {
-        console.log('Blob upload completed:', blob.url);
-      },
+    const blob = await put(filename, buffer, {
+      access: 'public',
+      contentType: contentType.includes('image/') ? contentType : 'image/jpeg',
+      addRandomSuffix: true,
     });
 
-    // handleUpload mengembalikan object yang siap di-send
-    if (jsonResponse?.status) {
-      return res.status(jsonResponse.status).json(jsonResponse.body ?? jsonResponse);
-    }
-
-    return res.status(200).json(jsonResponse);
+    return res.status(200).json({
+      url: blob.url,
+      pathname: blob.pathname,
+    });
   } catch (error) {
     console.error('Upload error:', error);
-    return res.status(400).json({
+    return res.status(500).json({
       error: error.message || 'Upload failed',
     });
   }
