@@ -1,14 +1,5 @@
 // api/create-url.js
 import { createClient } from '@libsql/client';
-import { put } from '@vercel/blob';
-import formidable from 'formidable';
-import fs from 'fs';
-
-export const config = {
-  api: {
-    bodyParser: false, // penting untuk FormData
-  },
-};
 
 const turso = createClient({
   url: process.env.TURSO_DATABASE_URL,
@@ -25,35 +16,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse FormData
-    const form = formidable({});
-    const [fields, files] = await form.parse(req);
-
-    const originalUrl = fields.originalUrl?.[0];
-    const description = fields.description?.[0] || '';
-    const thumbnailFile = files.thumbnail?.[0];
+    const { originalUrl, description = '', thumbnailUrl = null } = req.body;
 
     if (!originalUrl) {
       return res.status(400).json({ error: 'originalUrl is required' });
     }
 
-    let thumbnailUrl = null;
-
-    // Upload ke Vercel Blob
-    if (thumbnailFile) {
-      const fileBuffer = fs.readFileSync(thumbnailFile.filepath);
-      const fileExt = thumbnailFile.originalFilename?.split('.').pop() || 'jpg';
-      const fileName = `thumbnails/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-
-      const blob = await put(fileName, fileBuffer, {
-        access: 'public',
-        contentType: thumbnailFile.mimetype,
-      });
-
-      thumbnailUrl = blob.url;
-    }
-
-    // Generate short code
+    // Generate short code unik
     let shortCode = generateShortCode();
     let attempts = 0;
     while (attempts < 5) {
@@ -73,7 +42,8 @@ export default async function handler(req, res) {
       args: [originalUrl, shortCode, description, thumbnailUrl],
     });
 
-    const shortUrl = `${req.headers.origin || 'https://' + req.headers.host}/short/${shortCode}`;
+    const origin = req.headers.origin || `https://${req.headers.host}`;
+    const shortUrl = `${origin}/short/${shortCode}`;
 
     return res.status(201).json({
       success: true,

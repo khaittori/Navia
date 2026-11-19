@@ -1,5 +1,6 @@
 // src/components/UrlForm.jsx
 import React, { useState } from 'react';
+import { upload } from '@vercel/blob/client';
 
 const UrlForm = () => {
   const [originalUrl, setOriginalUrl] = useState('');
@@ -25,17 +26,30 @@ const UrlForm = () => {
     setShortUrl('');
 
     try {
-      const formData = new FormData();
-      formData.append('originalUrl', originalUrl);
-      formData.append('description', description);
+      let thumbnailUrl = null;
+
+      // 1. Upload thumbnail langsung ke Vercel Blob (dari browser)
       if (thumbnailFile) {
-        formData.append('thumbnail', thumbnailFile);
         setUploading(true);
+        const blob = await upload(thumbnailFile.name, thumbnailFile, {
+          access: 'public',
+          handleUploadUrl: '/api/upload', // kita buat endpoint ini
+        });
+        thumbnailUrl = blob.url;
+        setUploading(false);
       }
 
+      // 2. Kirim data ke API (hanya JSON)
       const res = await fetch('/api/create-url', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalUrl,
+          description,
+          thumbnailUrl,
+        }),
       });
 
       const data = await res.json();
@@ -75,15 +89,7 @@ const UrlForm = () => {
         style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
       >
         <div>
-          <label
-            htmlFor="originalUrl"
-            style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
+          <label htmlFor="originalUrl" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
             Original URL:
           </label>
           <input
@@ -92,27 +98,13 @@ const UrlForm = () => {
             value={originalUrl}
             onChange={(e) => setOriginalUrl(e.target.value)}
             required
-            style={{
-              width: 'calc(100% - 22px)',
-              padding: '10px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              fontSize: '16px',
-            }}
+            style={{ width: 'calc(100% - 22px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
             placeholder="e.g., https://example.com/your-very-long-url"
           />
         </div>
 
         <div>
-          <label
-            htmlFor="description"
-            style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
+          <label htmlFor="description" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
             Description (for Link Preview):
           </label>
           <input
@@ -120,27 +112,13 @@ const UrlForm = () => {
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            style={{
-              width: 'calc(100% - 22px)',
-              padding: '10px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
-              fontSize: '16px',
-            }}
+            style={{ width: 'calc(100% - 22px)', padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '16px' }}
             placeholder="Optional description for Open Graph preview"
           />
         </div>
 
         <div>
-          <label
-            htmlFor="thumbnail"
-            style={{
-              display: 'block',
-              marginBottom: '8px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
+          <label htmlFor="thumbnail" style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#555' }}>
             Thumbnail (optional):
           </label>
           <input
@@ -151,14 +129,7 @@ const UrlForm = () => {
             style={{ fontSize: '14px' }}
           />
           {thumbnailFile && (
-            <p
-              style={{
-                fontSize: '0.9em',
-                color: '#555',
-                marginTop: '8px',
-                fontStyle: 'italic',
-              }}
-            >
+            <p style={{ fontSize: '0.9em', color: '#555', marginTop: '8px', fontStyle: 'italic' }}>
               Selected: {thumbnailFile.name}
             </p>
           )}
@@ -176,81 +147,26 @@ const UrlForm = () => {
             cursor: loading || uploading ? 'not-allowed' : 'pointer',
             fontSize: '16px',
             fontWeight: 'bold',
-            transition: 'background-color 0.3s ease, opacity 0.3s ease',
           }}
         >
-          {uploading
-            ? 'Uploading Thumbnail...'
-            : loading
-            ? 'Creating Link...'
-            : 'Create Short URL'}
+          {uploading ? 'Uploading Thumbnail...' : loading ? 'Creating Link...' : 'Create Short URL'}
         </button>
       </form>
 
       {error && (
-        <p
-          style={{
-            color: '#d32f2f',
-            textAlign: 'center',
-            marginTop: '20px',
-            fontWeight: 'bold',
-          }}
-        >
+        <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '20px', fontWeight: 'bold' }}>
           {error}
         </p>
       )}
 
       {shortUrl && (
-        <div
-          style={{
-            marginTop: '30px',
-            textAlign: 'center',
-            borderTop: '1px solid #eee',
-            paddingTop: '20px',
-          }}
-        >
-          <h3 style={{ marginBottom: '10px', color: '#333' }}>
-            Your Short URL is Ready!
-          </h3>
-          <p
-            style={{
-              backgroundColor: '#e9ecef',
-              padding: '12px',
-              borderRadius: '4px',
-              wordBreak: 'break-all',
-            }}
-          >
-            <a
-              href={shortUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: '#007bff',
-                textDecoration: 'none',
-                fontWeight: 'bold',
-                fontSize: '1.1em',
-              }}
-            >
+        <div style={{ marginTop: '30px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '20px' }}>
+          <h3 style={{ marginBottom: '10px', color: '#333' }}>Your Short URL is Ready!</h3>
+          <p style={{ backgroundColor: '#e9ecef', padding: '12px', borderRadius: '4px', wordBreak: 'break-all' }}>
+            <a href={shortUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#007bff', textDecoration: 'none', fontWeight: 'bold', fontSize: '1.1em' }}>
               {shortUrl}
             </a>
           </p>
-          {thumbnailFile && (
-            <div style={{ marginTop: '20px' }}>
-              <h4 style={{ marginBottom: '10px', color: '#555' }}>
-                Thumbnail Preview:
-              </h4>
-              <img
-                src={URL.createObjectURL(thumbnailFile)}
-                alt="Thumbnail Preview"
-                style={{
-                  maxWidth: '150px',
-                  maxHeight: '150px',
-                  borderRadius: '8px',
-                  border: '1px solid #ddd',
-                }}
-              />
-            </div>
-          )}
         </div>
       )}
     </div>
