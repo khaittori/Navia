@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { upload } from '@vercel/blob/client';
 
 const UrlForm = () => {
   const [originalUrl, setOriginalUrl] = useState('');
@@ -16,23 +17,42 @@ const UrlForm = () => {
     setShortUrl('');
 
     try {
-      const formData = new FormData();
-      formData.append('originalUrl', originalUrl);
-      formData.append('description', description);
+      let thumbnailUrl = null;
+
+      // 1. Upload thumbnail dulu (kalau ada) pakai client-side upload
       if (thumbnailFile) {
-        formData.append('thumbnail', thumbnailFile);
         setUploading(true);
+        const blob = await upload(thumbnailFile.name, thumbnailFile, {
+          access: 'public',
+          handleUploadUrl: '/api/upload',
+        });
+        thumbnailUrl = blob.url;
+        setUploading(false);
       }
 
+      // 2. Kirim data ke create-url sebagai JSON
       const res = await fetch('/api/create-url', {
         method: 'POST',
-        body: formData, // jangan set Content-Type manual
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalUrl,
+          description,
+          thumbnailUrl,
+        }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(text || `Server error (${res.status})`);
+      }
 
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create short URL');
+        throw new Error(data.error || data.message || 'Failed to create short URL');
       }
 
       setShortUrl(data.shortUrl);
@@ -100,22 +120,24 @@ const UrlForm = () => {
             cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading ? (uploading ? 'Uploading...' : 'Creating...') : 'Create Short URL'}
+          {loading ? (uploading ? 'Uploading thumbnail...' : 'Creating...') : 'Create Short URL'}
         </button>
       </form>
 
       {error && (
-        <p style={{ color: 'red', marginTop: 16 }}>{error}</p>
+        <p style={{ color: '#ff6b6b', marginTop: 16, wordBreak: 'break-word' }}>
+          {error}
+        </p>
       )}
 
       {shortUrl && (
-        <div style={{ marginTop: 24, padding: 16, background: '#e8f5e9', borderRadius: 8 }}>
+        <div style={{ marginTop: 24, padding: 16, background: '#e8f5e9', borderRadius: 8, color: '#1b5e20' }}>
           <p style={{ margin: 0, fontWeight: 'bold' }}>Short URL berhasil dibuat:</p>
           <a
             href={shortUrl}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ wordBreak: 'break-all' }}
+            style={{ wordBreak: 'break-all', color: '#1565c0' }}
           >
             {shortUrl}
           </a>
