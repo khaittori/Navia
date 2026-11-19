@@ -1,9 +1,13 @@
 // api/create-url.js
-import { createClient } from '@libsql/client/web';
+import { createClient } from '@libsql/client';
 import { put } from '@vercel/blob';
+import formidable from 'formidable';
+import fs from 'fs';
 
 export const config = {
-  runtime: 'edge',
+  api: {
+    bodyParser: false, // penting untuk FormData
+  },
 };
 
 const turso = createClient({
@@ -15,43 +19,41 @@ function generateShortCode() {
   return Math.random().toString(36).substring(2, 8);
 }
 
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const formData = await req.formData();
-    const originalUrl = formData.get('originalUrl');
-    const description = formData.get('description') || '';
-    const thumbnailFile = formData.get('thumbnail'); // File | null
+    // Parse FormData
+    const form = formidable({});
+    const [fields, files] = await form.parse(req);
+
+    const originalUrl = fields.originalUrl?.[0];
+    const description = fields.description?.[0] || '';
+    const thumbnailFile = files.thumbnail?.[0];
 
     if (!originalUrl) {
-      return new Response(JSON.stringify({ error: 'originalUrl is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return res.status(400).json({ error: 'originalUrl is required' });
     }
 
     let thumbnailUrl = null;
 
-    // Upload ke Vercel Blob jika ada file
-    if (thumbnailFile && thumbnailFile.size > 0) {
-      const fileExt = thumbnailFile.name.split('.').pop() || 'jpg';
+    // Upload ke Vercel Blob
+    if (thumbnailFile) {
+      const fileBuffer = fs.readFileSync(thumbnailFile.filepath);
+      const fileExt = thumbnailFile.originalFilename?.split('.').pop() || 'jpg';
       const fileName = `thumbnails/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
 
-      const blob = await put(fileName, thumbnailFile, {
+      const blob = await put(fileName, fileBuffer, {
         access: 'public',
-        addRandomSuffix: false,
+        contentType: thumbnailFile.mimetype,
       });
 
       thumbnailUrl = blob.url;
     }
 
-    // Generate short code unik (retry sederhana)
+    // Generate short code
     let shortCode = generateShortCode();
     let attempts = 0;
     while (attempts < 5) {
@@ -71,29 +73,16 @@ export default async function handler(req) {
       args: [originalUrl, shortCode, description, thumbnailUrl],
     });
 
-    const origin = new URL(req.url).origin;
-    const shortUrl = `${origin}/short/${shortCode}`;
+    const shortUrl = `${req.headers.origin || 'https://' + req.headers.host}/short/${shortCode}`;
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        shortCode,
-        shortUrl,
-        thumbnailUrl,
-      }),
-      {
-        status: 201,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    return res.status(201).json({
+      success: true,
+      shortCode,
+      shortUrl,
+      thumbnailUrl,
+    });
   } catch (err) {
     console.error('Error creating short URL:', err);
-    return new Response(
-      JSON.stringify({ error: err.message || 'Internal server error' }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 }
