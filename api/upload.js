@@ -7,8 +7,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Pastikan body sudah berupa object
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    // Pastikan body selalu object
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        return res.status(400).json({ error: 'Invalid JSON body' });
+      }
+    }
+
+    if (!body || typeof body !== 'object') {
+      return res.status(400).json({ error: 'Missing or invalid body' });
+    }
 
     const jsonResponse = await handleUpload({
       body,
@@ -31,17 +42,16 @@ export default async function handler(req, res) {
       },
     });
 
-    // handleUpload bisa return { status, body } atau langsung body tergantung versi
-    if (jsonResponse && typeof jsonResponse.status === 'number') {
-      return res.status(jsonResponse.status).json(jsonResponse.body);
+    // handleUpload mengembalikan object yang siap di-send
+    if (jsonResponse?.status) {
+      return res.status(jsonResponse.status).json(jsonResponse.body ?? jsonResponse);
     }
 
-    // fallback
     return res.status(200).json(jsonResponse);
   } catch (error) {
     console.error('Upload error:', error);
-    return res.status(400).json({ 
-      error: error.message || 'Upload failed' 
+    return res.status(400).json({
+      error: error.message || 'Upload failed',
     });
   }
 }
